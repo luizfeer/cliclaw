@@ -103,6 +103,7 @@ async function cmdSetup() {
       ok('Claude Code installed')
     }
     console.log()
+  console.log()
     warn('Authentication required (opens browser):')
     if (await promptYN("Run 'claude' login now?", 'Y'))
       spawnSync('claude', [], { stdio: 'inherit', shell: true })
@@ -266,6 +267,13 @@ switch (cmd) {
   case 'restart': cmdPm2(['restart', 'cliclaw', '--update-env']); break
   case 'status':  cmdPm2(['status']); break
   case 'logs':    spawnSync('pm2', ['logs', 'cliclaw', '--lines', '50'], { stdio: 'inherit', shell: true }); break
+  case 'version':
+  case '--version':
+  case '-v': {
+    const pkg = JSON.parse(fs.readFileSync(path.join(PKG_DIR, 'package.json'), 'utf8'))
+    console.log()
+    break
+  }
   case 'update':
     info('Updating cliclaw...')
     run('npm update -g cliclaw')

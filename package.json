@@ -1,6 +1,6 @@
 {
   "name": "cliclaw",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Telegram bot bridging AI CLIs (Claude Code, Codex) to Forum Topics",
   "main": "index.ts",
   "scripts": {
