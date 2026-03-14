@@ -4,6 +4,7 @@ import type { Config, AgentName } from '../config'
 import { killSession } from '../agents/claude'
 import { formatTelegramMarkdown, splitTelegramMessage, TELEGRAM_MARKDOWN_OPTS } from '../telegram'
 import { dockerHelpText, pm2HelpText, runDockerCommand, runPm2Command } from '../admin'
+import { getLang, t } from '../i18n'
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
@@ -12,15 +13,13 @@ function isAdmin(ctx: Context, config: Config): boolean {
 }
 
 async function guardAdmin(ctx: Context, config: Config): Promise<boolean> {
+  const lang = getLang(ctx)
   if (config.TELEGRAM_ADMIN_IDS.length === 0) {
-    await ctx.reply(
-      formatTelegramMarkdown('⚠️ Admin commands disabled. Set `TELEGRAM_ADMIN_IDS` in `.env`.'),
-      TELEGRAM_MARKDOWN_OPTS
-    )
+    await ctx.reply(formatTelegramMarkdown(t(lang, 'adminDisabled')), TELEGRAM_MARKDOWN_OPTS)
     return false
   }
   if (!isAdmin(ctx, config)) {
-    await ctx.reply(formatTelegramMarkdown('⛔ You do not have permission.'), TELEGRAM_MARKDOWN_OPTS)
+    await ctx.reply(formatTelegramMarkdown(t(lang, 'noPermission')), TELEGRAM_MARKDOWN_OPTS)
     return false
   }
   return true
@@ -32,39 +31,28 @@ async function replyChunks(ctx: Context, text: string) {
   }
 }
 
-// ─── setup guide sent when no CLI is available ───────────────────────────────
+// ─── setup guide ────────────────────────────────────────────────────────────
 
-function setupGuide(available: AgentName[]): string {
+function setupGuide(available: AgentName[], lang: 'pt' | 'en'): string {
   const hasClaude = available.includes('claude')
   const hasCodex  = available.includes('codex')
+  if (hasClaude && hasCodex) return ''
 
-  if (hasClaude && hasCodex) return ''   // nothing to say
-
-  let msg = '⚙️ **Cli-Claw Setup**\n\n'
-
+  let msg = t(lang, 'setupTitle')
   if (!hasClaude && !hasCodex) {
-    msg += '❌ No AI CLI found. Install at least one:\n\n'
+    msg += t(lang, 'setupNone')
   } else {
-    msg += '✅ ' + (hasClaude ? '🟣 Claude' : '🟢 Codex') + ' ready!\n'
-    msg += '➕ You can also add ' + (hasClaude ? 'Codex' : 'Claude') + ':\n\n'
+    const readyName = hasClaude ? '🟣 Claude' : '🟢 Codex'
+    msg += t(lang, 'setupOneReady', readyName)
   }
-
-  if (!hasClaude) {
-    msg += '**🟣 Claude Code** (requires claude.ai subscription)\n'
-    msg += '```\nnpm install -g @anthropic-ai/claude-code\nclaude\n```\n\n'
-  }
-
-  if (!hasCodex) {
-    msg += '**🟢 Codex** (requires OpenAI/ChatGPT account)\n'
-    msg += '```\nnpm install -g @openai/codex\ncodex login\n```\n\n'
-  }
-
-  msg += '🔜 **OpenCode** — coming soon!\n\n'
-  msg += 'After installing, restart the bot:\n`pm2 restart cliclaw`'
+  if (!hasClaude) msg += t(lang, 'setupClaudeInstructions')
+  if (!hasCodex)  msg += t(lang, 'setupCodexInstructions')
+  msg += t(lang, 'setupOpenCodeSoon')
+  msg += t(lang, 'setupRestart')
   return msg
 }
 
-// ─── create session & forum topic ───────────────────────────────────────────
+// ─── create session ──────────────────────────────────────────────────────────
 
 async function createSession(
   ctx: Context,
@@ -73,10 +61,10 @@ async function createSession(
   chatId: string,
   model: AgentName
 ) {
+  const lang  = getLang(ctx)
   const emoji = model === 'claude' ? '🟣' : '🟢'
-  const label = model === 'claude' ? 'Claude' : 'Codex'
   const n = storage.listSessions(chatId).length + 1
-  const topicName = `${emoji} ${label} #${n}`
+  const topicName = `${emoji} ${model === 'claude' ? 'Claude' : 'Codex'} #${n}`
 
   if (config.FORUM_GROUP_ID) {
     try {
@@ -85,128 +73,117 @@ async function createSession(
       const session = storage.createSession(chatId, model, topic.message_thread_id)
       await ctx.api.sendMessage(
         groupId,
-        formatTelegramMarkdown(`${emoji} **${session.name}** ready!\nSend your message here.`),
+        formatTelegramMarkdown(`${emoji} **${session.name}** ${t(lang, 'sessionReady', '')}`),
         { message_thread_id: topic.message_thread_id, ...TELEGRAM_MARKDOWN_OPTS }
       )
       return session
     } catch (err: any) {
-      await ctx.reply(`⚠️ Could not create topic: ${err.message}\nMake sure the bot is admin of the group.`)
+      await ctx.reply(t(lang, 'topicCreateError', err.message))
       return null
     }
   }
 
   const session = storage.createSession(chatId, model, 0)
   await ctx.reply(
-    formatTelegramMarkdown(`${emoji} **${session.name}** created! Send your messages here.`),
+    formatTelegramMarkdown(`${emoji} **${session.name}** ${t(lang, 'sessionCreatedDM', '')}`),
     TELEGRAM_MARKDOWN_OPTS
   )
   return session
 }
 
-// ─── register all commands ───────────────────────────────────────────────────
+// ─── register commands ───────────────────────────────────────────────────────
 
 export function registerCommands(bot: Bot<Context>, storage: Storage, config: Config) {
 
   // /start
   bot.command('start', async (ctx) => {
-    const name = ctx.from?.first_name || 'there'
+    const lang = getLang(ctx)
+    const name = ctx.from?.first_name || (lang === 'pt' ? 'usuário' : 'there')
     const { availableAgents: av } = config
 
-    const setup = setupGuide(av)
+    const setup = setupGuide(av, lang)
     if (setup) {
-      await replyChunks(ctx, `👋 Hello **${name}**! Welcome to **Cli-Claw** 🦀\n\n` + setup)
+      await replyChunks(ctx, t(lang, 'welcome', name) + '\n\n' + setup)
       return
     }
 
     const agentLines = [
       av.includes('claude') ? '🟣 **Claude** — Anthropic (subscription)' : null,
       av.includes('codex')  ? '🟢 **Codex** — OpenAI CLI' : null,
-      '🔜 **OpenCode** — coming soon',
+      '🔜 **OpenCode** — ' + (lang === 'pt' ? 'em breve' : 'coming soon'),
     ].filter(Boolean).join('\n')
 
     await replyChunks(ctx,
-      `👋 Hello **${name}**! Welcome to **Cli-Claw** 🦀\n\n` +
+      t(lang, 'welcome', name) + '\n\n' +
       agentLines + '\n\n' +
-      '`/new` or `/nova` — new Claude session\n' +
-      '`/new codex` or `/nova codex` — new Codex session\n' +
-      '`/sessions` or `/sessoes` — list sessions\n' +
-      '`/clear` or `/limpar` — reset current session\n' +
-      '`/status` — active session info\n' +
-      '`/id` — this chat ID\n' +
-      '`/help` or `/ajuda` — show this message'
+      t(lang, 'helpCommands')
     )
   })
 
-  // /new + /nova  (English + Portuguese)
+  // /new + /nova
   const novaHandler = async (ctx: Context) => {
-    if (!ctx.chat) return
+    const lang   = getLang(ctx)
     const chatId = String(ctx.chat!.id)
     const arg    = String(ctx.match || '').trim().toLowerCase()
     const model: AgentName = arg === 'codex' ? 'codex' : 'claude'
     const { availableAgents: av } = config
 
-    // Neither configured
     if (av.length === 0) {
-      await replyChunks(ctx, setupGuide(av))
-      return
+      await replyChunks(ctx, setupGuide(av, lang)); return
     }
 
-    // Requested model not available
     if (!av.includes(model)) {
       const other = model === 'claude' ? 'codex' : 'claude'
-      const setup = setupGuide(av)
-      await replyChunks(ctx,
-        `⚠️ **${model === 'claude' ? 'Claude' : 'Codex'}** is not configured yet.\n\n` +
-        (av.includes(other)
-          ? `Use \`/new ${other}\` to start a ${other} session instead.\n\n`
-          : '') +
-        setup
-      )
-      return
+      let msg = t(lang, 'modelNotConfigured', model === 'claude' ? 'Claude' : 'Codex') + '\n\n'
+      if (av.includes(other)) {
+        msg += t(lang, 'useOtherModel', `/new ${other}`, other)
+      }
+      msg += setupGuide(av, lang)
+      await replyChunks(ctx, msg); return
     }
 
-    const ack = await ctx.reply(`⏳ Creating ${model === 'claude' ? '🟣 Claude' : '🟢 Codex'} session...`)
+    const label = model === 'claude' ? '🟣 Claude' : '🟢 Codex'
+    const ack = await ctx.reply(t(lang, 'creatingSession', label))
     await createSession(ctx, storage, config, chatId, model)
-    try { await ctx.api.deleteMessage(ctx.chat.id, ack.message_id) } catch {}
+    try { await ctx.api.deleteMessage(ctx.chat!.id, ack.message_id) } catch {}
   }
-
   bot.command('nova', novaHandler)
   bot.command('new',  novaHandler)
 
-  // /sessions + /sessoes
+  // /sessoes + /sessions
   const sessoesHandler = async (ctx: Context) => {
-    if (!ctx.chat) return
-    const chatId = String(ctx.chat!.id)
+    const lang     = getLang(ctx)
+    const chatId   = String(ctx.chat!.id)
     const sessions = storage.listSessions(chatId)
     if (sessions.length === 0) {
-      await ctx.reply('No sessions yet. Use /new or /nova.')
-      return
+      await ctx.reply(t(lang, 'noSessions')); return
     }
     const active = storage.getActiveSession(chatId)
-    let msg = '📋 **Sessions:**\n'
+    let msg = t(lang, 'sessionsTitle')
     for (const s of sessions) {
       const tick   = s.id === active?.id ? '✅' : '•'
-      const thread = s.threadId ? ` [topic #${s.threadId}]` : ''
-      msg += `${tick} **${s.name}**${thread} — ${s.history.length} msgs\n`
+      const thread = s.threadId ? ` [${t(lang, 'topicLabel', s.threadId)}]` : ''
+      msg += `${tick} **${s.name}**${thread} — ${t(lang, 'msgCount', s.history.length)}\n`
     }
     await replyChunks(ctx, msg)
   }
   bot.command('sessoes',  sessoesHandler)
   bot.command('sessions', sessoesHandler)
 
-  // /clear + /limpar
+  // /limpar + /clear
   const limparHandler = async (ctx: Context) => {
+    const lang     = getLang(ctx)
     const chatId   = String(ctx.chat!.id)
     const threadId = ctx.message?.message_thread_id ?? 0
     const session  = threadId
       ? (storage.getSessionByThreadId(chatId, threadId) || storage.getActiveSession(chatId))
       : storage.getActiveSession(chatId)
-    if (!session) { await ctx.reply('No active session.'); return }
+    if (!session) { await ctx.reply(t(lang, 'noActiveSession')); return }
     killSession(session.id)
     storage.clearSession(chatId, session.id)
     const opts: any = session.threadId ? { message_thread_id: session.threadId } : {}
     await ctx.reply(
-      formatTelegramMarkdown(`🧹 **${session.name}** cleared!`),
+      formatTelegramMarkdown(t(lang, 'sessionCleared', `**${session.name}**`)),
       { ...opts, ...TELEGRAM_MARKDOWN_OPTS }
     )
   }
@@ -215,43 +192,41 @@ export function registerCommands(bot: Bot<Context>, storage: Storage, config: Co
 
   // /status
   bot.command('status', async (ctx) => {
+    const lang     = getLang(ctx)
     const chatId   = String(ctx.chat!.id)
     const threadId = ctx.message?.message_thread_id ?? 0
     const session  = threadId
       ? (storage.getSessionByThreadId(chatId, threadId) || storage.getActiveSession(chatId))
       : storage.getActiveSession(chatId)
-    if (!session) { await ctx.reply('No active session. Use /new.'); return }
+    if (!session) { await ctx.reply(t(lang, 'noActiveSessionUseNew')); return }
     const emoji = session.model === 'claude' ? '🟣' : '🟢'
     const opts: any = session.threadId ? { message_thread_id: session.threadId } : {}
     await ctx.reply(
       formatTelegramMarkdown(
         `${emoji} **${session.name}**\n` +
-        `💬 ${session.history.length} messages\n` +
+        `${t(lang, 'statusMessages', session.history.length)}\n` +
         `🕐 ${new Date(session.createdAt).toLocaleString()}\n` +
-        `🔖 Topic: ${session.threadId || 'DM'}`
+        `${t(lang, 'statusTopic', session.threadId || 'DM')}`
       ),
       { ...opts, ...TELEGRAM_MARKDOWN_OPTS }
     )
   })
 
-  // /help + /ajuda
+  // /ajuda + /help
   const ajudaHandler = async (ctx: Context) => {
+    const lang = getLang(ctx)
     const { availableAgents: av } = config
     const agentLines = [
-      av.includes('claude') ? '🟣 Claude ready' : '🟣 Claude — not configured',
-      av.includes('codex')  ? '🟢 Codex ready'  : '🟢 Codex — not configured',
-      '🔜 OpenCode — coming soon',
+      av.includes('claude')
+        ? `🟣 ${t(lang, 'agentReady', 'Claude')}`
+        : `🟣 ${t(lang, 'agentNotConfigured', 'Claude')}`,
+      av.includes('codex')
+        ? `🟢 ${t(lang, 'agentReady', 'Codex')}`
+        : `🟢 ${t(lang, 'agentNotConfigured', 'Codex')}`,
+      '🔜 OpenCode — ' + (lang === 'pt' ? 'em breve' : 'coming soon'),
     ].join('\n')
-
     await replyChunks(ctx,
-      `🦀 **Cli-Claw**\n\n` +
-      agentLines + '\n\n' +
-      '`/new` `/nova` — new Claude session\n' +
-      '`/new codex` `/nova codex` — new Codex session\n' +
-      '`/sessions` `/sessoes` — list sessions\n' +
-      '`/clear` `/limpar` — reset current session\n' +
-      '`/status` — active session info\n' +
-      '`/id` — this chat ID'
+      `🦀 **Cli-Claw**\n\n${agentLines}\n\n${t(lang, 'helpCommands')}`
     )
   }
   bot.command('ajuda', ajudaHandler)
@@ -259,18 +234,19 @@ export function registerCommands(bot: Bot<Context>, storage: Storage, config: Co
 
   // /id
   bot.command('id', async (ctx) => {
+    const lang     = getLang(ctx)
     const chat     = ctx.chat
     const threadId = ctx.message?.message_thread_id
-    let msg = `🆔 **Chat Info**\n\n`
+    let msg = t(lang, 'chatInfoTitle')
     msg += `• Chat ID: \`${chat.id}\`\n`
-    msg += `• Type: \`${chat.type}\`\n`
-    if ('title' in chat) msg += `• Name: ${chat.title}\n`
-    if (threadId) msg += `• Thread ID: \`${threadId}\`\n`
-    msg += `• Your user ID: \`${ctx.from?.id}\`\n`
+    msg += `• ${t(lang, 'chatInfoType')}: \`${chat.type}\`\n`
+    if ('title' in chat) msg += `• ${t(lang, 'chatInfoName')}: ${chat.title}\n`
+    if (threadId)        msg += `• ${t(lang, 'chatInfoThread')}: \`${threadId}\`\n`
+    msg += `• ${t(lang, 'chatInfoUser')}: \`${ctx.from?.id}\`\n`
     if (config.FORUM_GROUP_ID)
-      msg += `\n✅ Forum mode active: \`${config.FORUM_GROUP_ID}\``
+      msg += `\n${t(lang, 'forumModeActive', config.FORUM_GROUP_ID)}`
     else
-      msg += `\n💡 To enable Forum mode, add to \`.env\`:\n\`FORUM_GROUP_ID=${chat.id}\``
+      msg += `\n${t(lang, 'forumModeHint', chat.id)}`
     await replyChunks(ctx, msg)
   })
 
@@ -281,7 +257,8 @@ export function registerCommands(bot: Bot<Context>, storage: Storage, config: Co
     if (!args) { await replyChunks(ctx, dockerHelpText()); return }
     await ctx.replyWithChatAction('typing')
     try {
-      await replyChunks(ctx, await runDockerCommand(args))
+      for (const chunk of splitTelegramMessage(formatTelegramMarkdown(await runDockerCommand(args))))
+        if (chunk) await ctx.reply(chunk, TELEGRAM_MARKDOWN_OPTS)
     } catch (err: any) {
       await replyChunks(ctx, `❌ ${err.message}\n\n${dockerHelpText()}`)
     }
@@ -294,7 +271,8 @@ export function registerCommands(bot: Bot<Context>, storage: Storage, config: Co
     if (!args) { await replyChunks(ctx, pm2HelpText()); return }
     await ctx.replyWithChatAction('typing')
     try {
-      await replyChunks(ctx, await runPm2Command(args))
+      for (const chunk of splitTelegramMessage(formatTelegramMarkdown(await runPm2Command(args))))
+        if (chunk) await ctx.reply(chunk, TELEGRAM_MARKDOWN_OPTS)
     } catch (err: any) {
       await replyChunks(ctx, `❌ ${err.message}\n\n${pm2HelpText()}`)
     }

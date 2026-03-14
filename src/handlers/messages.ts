@@ -4,6 +4,7 @@ import type { Config } from '../config'
 import { askClaude } from '../agents/claude'
 import { askCodex } from '../agents/codex'
 import { mdToTg, splitHtml } from '../utils/markdown'
+import { getLang, t } from '../i18n'
 
 const activeLocks = new Set<string>()
 
@@ -26,7 +27,7 @@ function makeTopicTitle(userMessage: string, model: string): string {
     const cut = title.slice(0, 40).lastIndexOf(' ')
     title = title.slice(0, cut > 10 ? cut : 40).trim()
   }
-  return `${title} — ${label}`
+  return `${title} \u2014 ${label}`
 }
 
 async function tryRenameThread(
@@ -39,9 +40,7 @@ async function tryRenameThread(
   if (!threadId || !groupId) return
   try {
     await api.editForumTopic(groupId, threadId, { name: makeTopicTitle(userMessage, model) })
-  } catch {
-    // silently ignore — non-critical
-  }
+  } catch {}
 }
 
 export function registerMessageHandler(bot: Bot<Context>, storage: Storage, config: Config) {
@@ -49,6 +48,7 @@ export function registerMessageHandler(bot: Bot<Context>, storage: Storage, conf
     const chatId   = String(ctx.chat.id)
     const text     = ctx.message.text
     const threadId = ctx.message.message_thread_id ?? 0
+    const lang     = getLang(ctx)
 
     if (text.startsWith('/')) return
 
@@ -59,14 +59,14 @@ export function registerMessageHandler(bot: Bot<Context>, storage: Storage, conf
     } else {
       session = storage.getActiveSession(chatId)
       if (!session) {
-        await ctx.reply('\u26a0\ufe0f No active session. Use /new or /nova.')
+        await ctx.reply(t(lang, 'noActiveSessionReply'))
         return
       }
     }
 
     if (activeLocks.has(session.id)) {
       const opts: any = threadId > 0 ? { message_thread_id: threadId } : {}
-      await ctx.reply('\u2699\ufe0f Still processing the previous message, please wait...', opts)
+      await ctx.reply(t(lang, 'stillProcessing'), opts)
       return
     }
 
@@ -76,9 +76,10 @@ export function registerMessageHandler(bot: Bot<Context>, storage: Storage, conf
     const replyOpts: any = threadId > 0 ? { message_thread_id: threadId } : {}
     const emoji = session.model === 'claude' ? '\U0001f7e3' : '\U0001f7e2'
 
-    const workingMsg = await ctx.reply(`${emoji} <i>Processing...</i>`, {
-      ...replyOpts, parse_mode: 'HTML'
-    })
+    const workingMsg = await ctx.reply(
+      `${emoji} <i>${t(lang, 'processing')}</i>`,
+      { ...replyOpts, parse_mode: 'HTML' }
+    )
 
     const typingLoop = setInterval(async () => {
       try { await ctx.replyWithChatAction('typing', replyOpts) } catch {}
@@ -96,7 +97,7 @@ export function registerMessageHandler(bot: Bot<Context>, storage: Storage, conf
           (id) => storage.setCodexThreadId(chatId, session!.id, id))
       }
     } catch (err: any) {
-      response = `\u274c Error: ${err.message}`
+      response = `\u274c ${lang === 'pt' ? 'Erro' : 'Error'}: ${err.message}`
     } finally {
       clearInterval(typingLoop)
       activeLocks.delete(session.id)
