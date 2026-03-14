@@ -7,18 +7,49 @@ import { mdToTg, splitHtml } from '../utils/markdown'
 
 const activeLocks = new Set<string>()
 
+// ─── helpers ────────────────────────────────────────────────────────────────
+
 async function sendLong(api: Api, chatId: string, text: string, opts: any = {}) {
   const html = mdToTg(text)
-  const chunks = splitHtml(html)
-  for (const chunk of chunks) {
+  for (const chunk of splitHtml(html)) {
     try {
       await api.sendMessage(chatId, chunk, { ...opts, parse_mode: 'HTML' })
     } catch {
-      // fallback sem formatação se tiver tag inválida
       await api.sendMessage(chatId, text.slice(0, 4000), opts)
     }
   }
 }
+
+/** Generates a short topic title from the first user message */
+function makeTopicTitle(userMessage: string, model: string): string {
+  const label = model === 'claude' ? 'Claude' : model === 'codex' ? 'Codex' : model
+  // First line only, max 40 chars, break at last word boundary
+  let title = userMessage.split('\n')[0].trim().replace(/\s+/g, ' ')
+  if (title.length > 40) {
+    const cut = title.slice(0, 40).lastIndexOf(' ')
+    title = title.slice(0, cut > 10 ? cut : 40).trim()
+  }
+  return `${title} — ${label}`
+}
+
+/** Renames the forum topic after the first message exchange */
+async function tryRenameThread(
+  api: Api,
+  groupId: number,
+  threadId: number,
+  userMessage: string,
+  model: string
+) {
+  if (!threadId || !groupId) return
+  try {
+    const name = makeTopicTitle(userMessage, model)
+    await api.editForumTopic(groupId, threadId, { name })
+  } catch {
+    // silently ignore — topic rename is non-critical
+  }
+}
+
+// ─── message handler ─────────────────────────────────────────────────────────
 
 export function registerMessageHandler(bot: Bot<Context>, storage: Storage, config: Config) {
   bot.on('message:text', async (ctx) => {
@@ -35,23 +66,26 @@ export function registerMessageHandler(bot: Bot<Context>, storage: Storage, conf
     } else {
       session = storage.getActiveSession(chatId)
       if (!session) {
-        await ctx.reply('⚠️ Nenhuma sessão ativa. Use /nova ou /nova codex.')
+        await ctx.reply('⚠️ No active session. Use /new or /nova.')
         return
       }
     }
 
     if (activeLocks.has(session.id)) {
-      const opts: any = threadId > 1 ? { message_thread_id: threadId } : {}
-      await ctx.reply('⚙️ Ainda processando a mensagem anterior, aguarde...', opts)
+      const opts: any = threadId > 0 ? { message_thread_id: threadId } : {}
+      await ctx.reply('⚙️ Still processing the previous message, please wait...', opts)
       return
     }
 
+    // Is this the first message? (rename topic after response)
+    const isFirstMessage = session.history.length === 0
+
     activeLocks.add(session.id)
-    const replyOpts: any = threadId > 1 ? { message_thread_id: threadId } : {}
+    const replyOpts: any = threadId > 0 ? { message_thread_id: threadId } : {}
     const emoji = session.model === 'claude' ? '🟣' : '🟢'
 
-    // Feedback imediato
-    const workingMsg = await ctx.reply(`${emoji} <i>Processando...</i>`, {
+    // Immediate feedback
+    const workingMsg = await ctx.reply(`${emoji} <i>Processing...</i>`, {
       ...replyOpts, parse_mode: 'HTML'
     })
 
@@ -72,7 +106,7 @@ export function registerMessageHandler(bot: Bot<Context>, storage: Storage, conf
           (id) => storage.setCodexThreadId(chatId, session!.id, id))
       }
     } catch (err: any) {
-      response = `❌ Erro: ${err.message}`
+      response = `❌ Error: ${err.message}`
     } finally {
       clearInterval(typingLoop)
       activeLocks.delete(session.id)
@@ -80,9 +114,19 @@ export function registerMessageHandler(bot: Bot<Context>, storage: Storage, conf
 
     storage.addMessage(chatId, session.id, 'assistant', response)
 
-    // Apagar "Processando..." e enviar resposta formatada
-    try { await ctx.api.deleteMessage(ctx.chat.id, workingMsg.message_id) } catch {}
+    // Rename topic on first exchange
+    if (isFirstMessage && config.FORUM_GROUP_ID && threadId > 0) {
+      await tryRenameThread(
+        ctx.api,
+        Number(config.FORUM_GROUP_ID),
+        threadId,
+        text,
+        session.model
+      )
+    }
 
+    // Delete "Processing..." and send formatted response
+    try { await ctx.api.deleteMessage(ctx.chat.id, workingMsg.message_id) } catch {}
     await sendLong(ctx.api, chatId, `${emoji} ${response}`, replyOpts)
   })
 }
