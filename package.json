@@ -1,6 +1,6 @@
 {
   "name": "cliclaw",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Telegram bot bridging AI CLIs (Claude Code, Codex) to Forum Topics",
   "main": "index.ts",
   "scripts": {
@@ -11,11 +11,12 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",
     "grammy": "^1.31.3",
-    "openai": "^4.97.0"
+    "openai": "^4.97.0",
+    "tsx": "^4.21.0"
   },
   "devDependencies": {
-    "typescript": "^5.0.0",
-    "@types/node": "^20.0.0"
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0"
   },
   "repository": {
     "type": "git",

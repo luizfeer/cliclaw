@@ -1,20 +1,21 @@
 const path = require('path')
-const HOME = process.env.HOME || '/root'
+const HOME = process.env.HOME || process.env.USERPROFILE || '/root'
 
 module.exports = {
   apps: [{
     name: 'cliclaw',
-    script: 'tsx',
-    args: 'index.ts',
+    script: 'index.ts',
+    interpreter: 'node',
+    interpreterArgs: '--require tsx/cjs',
+    exec_mode: 'fork',
+    instances: 1,
     cwd: __dirname,
-    interpreter: 'none',
     env: {
       NODE_ENV: 'production',
-      PATH: `${HOME}/.npm-global/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin`,
+      PATH: process.env.PATH || '',
       HOME,
     },
     watch: false,
-    instances: 1,
     autorestart: true,
     max_memory_restart: '300M',
     error_file: path.join(__dirname, 'logs/error.log'),

@@ -7,18 +7,12 @@ const fs   = require('fs')
 const path = require('path')
 const os   = require('os')
 
-// ─── root dir of the installed package ───────────────────────────────────────
 const PKG_DIR = path.resolve(__dirname, '..')
 
-// ─── colors (works without dependencies) ─────────────────────────────────────
+// ─── colors ──────────────────────────────────────────────────────────────────
 const c = {
-  reset:  '\x1b[0m',
-  bold:   '\x1b[1m',
-  cyan:   '\x1b[36m',
-  green:  '\x1b[32m',
-  yellow: '\x1b[33m',
-  red:    '\x1b[31m',
-  gray:   '\x1b[90m',
+  reset:'\x1b[0m', bold:'\x1b[1m', cyan:'\x1b[36m',
+  green:'\x1b[32m', yellow:'\x1b[33m', red:'\x1b[31m', gray:'\x1b[90m',
 }
 const ok   = (s) => console.log(`${c.green}${c.bold}✔${c.reset} ${s}`)
 const info = (s) => console.log(`${c.cyan}→${c.reset} ${s}`)
@@ -26,7 +20,6 @@ const warn = (s) => console.log(`${c.yellow}⚠${c.reset} ${s}`)
 const err  = (s) => console.error(`${c.red}✖${c.reset} ${s}`)
 const hdr  = (s) => console.log(`\n${c.bold}${c.cyan}${s}${c.reset}\n`)
 
-// ─── prompt helper ────────────────────────────────────────────────────────────
 function prompt(question, defaultVal = '') {
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout })
   return new Promise(resolve => {
@@ -44,7 +37,6 @@ async function promptYN(question, defaultVal = 'Y') {
   return answer.toLowerCase().startsWith('y')
 }
 
-// ─── shell helper ─────────────────────────────────────────────────────────────
 function run(cmd, opts = {}) {
   try {
     return execSync(cmd, { stdio: opts.silent ? 'pipe' : 'inherit', encoding: 'utf8', ...opts })
@@ -61,7 +53,6 @@ function which(bin) {
   } catch { return false }
 }
 
-// ─── banner ───────────────────────────────────────────────────────────────────
 function banner() {
   console.clear()
   console.log(`${c.cyan}${c.bold}`)
@@ -75,32 +66,27 @@ function banner() {
   console.log(`  ${c.gray}github.com/luizfeer/cliclaw${c.reset}\n`)
 }
 
-// ─── commands ─────────────────────────────────────────────────────────────────
+// ─── setup ────────────────────────────────────────────────────────────────────
 async function cmdSetup() {
   banner()
 
-  // 1. Node check
   hdr('1/5 — Node.js')
   const nodeVer = process.version
   const major = parseInt(nodeVer.slice(1))
   if (major >= 18) ok(`Node.js ${nodeVer}`)
-  else { err(`Node.js ${nodeVer} found but v18+ required. Please upgrade.`); process.exit(1) }
+  else { err(`Node.js ${nodeVer} — v18+ required. Please upgrade.`); process.exit(1) }
 
-  // 2. tsx + pm2
   hdr('2/5 — Dependencies')
-  if (!which('tsx')) {
-    info('Installing tsx...')
-    run('npm install -g tsx', { silent: true })
-    ok('tsx installed')
-  } else ok('tsx ready')
+  info('Installing local dependencies...')
+  run('npm install', { cwd: PKG_DIR, silent: true })
+  ok('Dependencies ready (tsx included)')
 
   if (!which('pm2')) {
-    info('Installing pm2...')
+    info('Installing pm2 globally...')
     run('npm install -g pm2', { silent: true })
-    ok('pm2 installed')
-  } else ok('pm2 ready')
+  }
+  ok('pm2 ready')
 
-  // 3. AI CLIs
   hdr('3/5 — AI CLI agents')
   console.log(`  ${c.cyan}🟣 Claude Code${c.reset}  — requires claude.ai subscription`)
   console.log(`  ${c.cyan}🟢 Codex${c.reset}        — requires OpenAI/ChatGPT account`)
@@ -118,9 +104,9 @@ async function cmdSetup() {
     }
     console.log()
     warn('Authentication required (opens browser):')
-    if (await promptYN("Run 'claude' login now?", 'Y')) {
+    if (await promptYN("Run 'claude' login now?", 'Y'))
       spawnSync('claude', [], { stdio: 'inherit', shell: true })
-    } else warn("Remember to run: claude")
+    else warn("Remember to run: claude")
   }
 
   if (installCodex) {
@@ -131,18 +117,42 @@ async function cmdSetup() {
       ok('Codex installed')
     }
     console.log()
-    if (await promptYN("Run 'codex login' now?", 'Y')) {
+    if (await promptYN("Run 'codex login' now?", 'Y'))
       spawnSync('codex', ['login'], { stdio: 'inherit', shell: true })
-    } else warn("Remember to run: codex login")
+    else warn("Remember to run: codex login")
   }
 
-  if (!installClaude && !installCodex) {
+  if (!installClaude && !installCodex)
     warn('No CLI installed — bot will show setup instructions until you add one.')
+
+  hdr('4/5 — Configuration')
+  await runConfigWizard()
+
+  hdr('5/5 — Start bot')
+  if (await promptYN('Start Cli-Claw with PM2?', 'Y')) {
+    process.chdir(PKG_DIR)
+    try { run('pm2 delete cliclaw', { throws: false, silent: true }) } catch {}
+    run('pm2 start ecosystem.config.js')
+    run('pm2 save')
+    ok('Cli-Claw is running!')
+    if (os.platform() !== 'win32') {
+      console.log()
+      info('To enable auto-start on boot:')
+      console.log(`  ${c.bold}pm2 startup${c.reset}  ${c.gray}(follow the printed command)${c.reset}`)
+    } else {
+      if (await promptYN('Enable auto-start on Windows login?', 'Y')) {
+        run('npm install -g pm2-windows-startup', { silent: true })
+        run('pm2-startup install')
+        ok('Auto-start configured')
+      }
+    }
   }
 
-  // 4. .env
-  hdr('4/5 — Configuration')
+  doneBanner()
+}
 
+// ─── config wizard ────────────────────────────────────────────────────────────
+async function runConfigWizard() {
   const envFile = path.join(PKG_DIR, '.env')
   const existing = {}
   if (fs.existsSync(envFile)) {
@@ -160,15 +170,19 @@ async function cmdSetup() {
     if (!token) warn('Token cannot be empty.')
   }
 
-  console.log(`\n${c.bold}Forum Group ID${c.reset} ${c.gray}(optional — needed for forum topics)${c.reset}`)
-  console.log(`${c.gray}  Start bot first, send /id in your group, paste the Chat ID here.${c.reset}`)
+  console.log(`\n${c.bold}Forum Group ID${c.reset} ${c.gray}(optional — for forum topic threads)${c.reset}`)
+  console.log(`${c.gray}  How to get it:${c.reset}`)
+  console.log(`${c.gray}  1. Add ${c.bold}@getidsbot${c.gray} to your group and it will reply with the ID${c.reset}`)
+  console.log(`${c.gray}  2. Or add this bot as admin, enable Topics, and send /id${c.reset}`)
+  console.log(`${c.gray}  Leave empty to configure later.\n${c.reset}`)
   const forumId = await prompt('FORUM_GROUP_ID (Enter to skip)', existing.FORUM_GROUP_ID || '')
 
   console.log(`\n${c.bold}Permission mode${c.reset}`)
   console.log(`  ${c.bold}1) auto${c.reset}    — always skip prompts ${c.cyan}(recommended)${c.reset}`)
   console.log(`  ${c.bold}2) session${c.reset} — ask per /new session`)
   console.log(`  ${c.bold}3) ask${c.reset}     — prefix message with ! to allow\n`)
-  const permChoice = await prompt('Choose [1/2/3]', existing.PERMISSION_MODE === 'session' ? '2' : existing.PERMISSION_MODE === 'ask' ? '3' : '1')
+  const permChoice = await prompt('Choose [1/2/3]',
+    existing.PERMISSION_MODE === 'session' ? '2' : existing.PERMISSION_MODE === 'ask' ? '3' : '1')
   const permMode = permChoice === '2' ? 'session' : permChoice === '3' ? 'ask' : 'auto'
   ok(`Permission mode: ${permMode}`)
 
@@ -178,56 +192,54 @@ async function cmdSetup() {
   envContent += `PERMISSION_MODE=${permMode}\n`
   envContent += `DATA_DIR=${dataDir}\n`
   fs.writeFileSync(envFile, envContent, 'utf8')
-  ok(`.env saved to ${envFile}`)
+  ok(`.env saved`)
+}
 
-  // 5. PM2
-  hdr('5/5 — Start bot')
-
-  if (await promptYN('Start Cli-Claw with PM2?', 'Y')) {
-    try { run('pm2 delete cliclaw', { throws: false, silent: true }) } catch {}
-    process.chdir(PKG_DIR)
-    run('pm2 start ecosystem.config.js')
-    run('pm2 save')
-    ok('Cli-Claw is running!')
-
-    if (os.platform() !== 'win32') {
-      console.log()
-      info('To enable auto-start on boot, run:')
-      console.log(`  ${c.bold}pm2 startup${c.reset}  ${c.gray}(then follow the printed command)${c.reset}`)
-    } else {
-      if (await promptYN('Install pm2-windows-startup for auto-start?', 'Y')) {
-        run('npm install -g pm2-windows-startup', { silent: true })
-        run('pm2-startup install')
-        ok('Auto-start configured')
-      }
-    }
+// ─── config (open .env in editor) ────────────────────────────────────────────
+function cmdConfig() {
+  const envFile = path.join(PKG_DIR, '.env')
+  if (!fs.existsSync(envFile)) {
+    warn('.env not found. Run: cliclaw setup')
+    process.exit(1)
   }
+  const platform = os.platform()
+  let editor, args
+  if (platform === 'win32') {
+    editor = 'notepad'; args = [envFile]
+  } else if (platform === 'darwin') {
+    editor = 'open'; args = ['-e', envFile]   // TextEdit
+  } else {
+    editor = process.env.EDITOR || process.env.VISUAL || 'nano'
+    args = [envFile]
+  }
+  info(`Opening .env with ${editor}...`)
+  const result = spawnSync(editor, args, { stdio: 'inherit', shell: platform === 'win32' })
+  if (result.error) {
+    // fallback: just print the path
+    warn(`Could not open editor. Edit manually:`)
+    console.log(`  ${c.bold}${envFile}${c.reset}`)
+  }
+}
 
-  // Done
+// ─── done banner ─────────────────────────────────────────────────────────────
+function doneBanner() {
   console.log(`\n${c.green}${c.bold}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${c.reset}`)
   console.log(`${c.green}${c.bold} ✔ Cli-Claw is ready!${c.reset}`)
   console.log(`${c.green}${c.bold}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${c.reset}\n`)
   console.log(`  ${c.bold}cliclaw start${c.reset}   — start bot`)
   console.log(`  ${c.bold}cliclaw stop${c.reset}    — stop bot`)
-  console.log(`  ${c.bold}cliclaw status${c.reset}  — show status`)
+  console.log(`  ${c.bold}cliclaw restart${c.reset} — restart bot`)
+  console.log(`  ${c.bold}cliclaw status${c.reset}  — PM2 status`)
   console.log(`  ${c.bold}cliclaw logs${c.reset}    — tail logs`)
-  console.log(`  ${c.bold}cliclaw setup${c.reset}   — re-run this wizard\n`)
-  console.log(`  ${c.cyan}Open Telegram and send /start to your bot!${c.reset}`)
-  if (!forumId) {
-    console.log()
-    warn("Don't forget to set FORUM_GROUP_ID in .env, then run: cliclaw restart")
-  }
-  console.log()
+  console.log(`  ${c.bold}cliclaw config${c.reset}  — edit .env`)
+  console.log(`  ${c.bold}cliclaw setup${c.reset}   — re-run wizard\n`)
+  console.log(`  ${c.cyan}Open Telegram and send /start to your bot!${c.reset}\n`)
 }
 
 function cmdPm2(args) {
   process.chdir(PKG_DIR)
   const r = spawnSync('pm2', args, { stdio: 'inherit', shell: true })
   process.exit(r.status ?? 0)
-}
-
-function cmdLogs() {
-  spawnSync('pm2', ['logs', 'cliclaw', '--lines', '50'], { stdio: 'inherit', shell: true })
 }
 
 function cmdHelp() {
@@ -239,22 +251,24 @@ function cmdHelp() {
   console.log(`  ${c.bold}restart${c.reset}  Restart the bot`)
   console.log(`  ${c.bold}status${c.reset}   Show PM2 status`)
   console.log(`  ${c.bold}logs${c.reset}     Tail logs`)
-  console.log(`  ${c.bold}update${c.reset}   Pull latest version\n`)
+  console.log(`  ${c.bold}config${c.reset}   Open .env in your editor`)
+  console.log(`  ${c.bold}update${c.reset}   Update to latest version\n`)
 }
 
 // ─── router ───────────────────────────────────────────────────────────────────
-const [,, cmd = 'help', ...rest] = process.argv
+const [,, cmd = 'help'] = process.argv
 
 switch (cmd) {
   case 'setup':   cmdSetup().catch(e => { err(e.message); process.exit(1) }); break
+  case 'config':  cmdConfig(); break
   case 'start':   cmdPm2(['start', path.join(PKG_DIR, 'ecosystem.config.js')]); break
   case 'stop':    cmdPm2(['stop', 'cliclaw']); break
   case 'restart': cmdPm2(['restart', 'cliclaw', '--update-env']); break
   case 'status':  cmdPm2(['status']); break
-  case 'logs':    cmdLogs(); break
+  case 'logs':    spawnSync('pm2', ['logs', 'cliclaw', '--lines', '50'], { stdio: 'inherit', shell: true }); break
   case 'update':
-    info('Pulling latest...')
-    run(`npm update -g cliclaw`)
+    info('Updating cliclaw...')
+    run('npm update -g cliclaw')
     ok('Updated! Run: cliclaw restart')
     break
   default: cmdHelp(); break
