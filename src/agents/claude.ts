@@ -7,7 +7,7 @@ const CLAUDE_BIN = '/home/ubuntu/.npm-global/bin/claude'
 function buildEnv() {
   const e: Record<string, string> = {
     ...process.env as any,
-    PATH: '/home/ubuntu/.bun/bin:/home/ubuntu/.npm-global/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin',
+    PATH: '/home/ubuntu/.npm-global/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin',
     HOME: '/home/ubuntu',
     LANG: 'en_US.UTF-8',
   }

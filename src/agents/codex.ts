@@ -3,7 +3,7 @@ import type { Session } from '../storage'
 
 const CODEX_BIN = '/home/ubuntu/.npm-global/bin/codex'
 const BASE_ENV = {
-  PATH: '/home/ubuntu/.bun/bin:/home/ubuntu/.npm-global/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin',
+  PATH: '/home/ubuntu/.npm-global/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin',
   HOME: '/home/ubuntu',
   LANG: 'en_US.UTF-8',
 }
