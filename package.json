@@ -5,7 +5,8 @@
   "main": "index.ts",
   "scripts": {
     "start": "tsx index.ts",
-    "dev": "tsx watch index.ts"
+    "dev": "tsx watch index.ts",
+    "setup": "node bin/cli.js setup"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",
@@ -28,5 +29,19 @@
     "bot",
     "forum"
   ],
-  "license": "MIT"
+  "license": "MIT",
+  "bin": {
+    "cliclaw": "./bin/cli.js"
+  },
+  "files": [
+    "bin/",
+    "src/",
+    "index.ts",
+    "ecosystem.config.js",
+    ".env.example",
+    "tsconfig.json"
+  ],
+  "engines": {
+    "node": ">=18"
+  }
 }
