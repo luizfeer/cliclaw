@@ -9,7 +9,6 @@ logs/
 .env
 
 # Bun
-bun.lockb
 
 # TypeScript build cache
 *.tsbuildinfo
@@ -18,5 +17,3 @@ bun.lockb
 wireguard-clients/
 
 # Arquivos extras não relacionados ao bot
-src/admin.ts
-src/telegram.ts
