@@ -1,0 +1,22 @@
+# Dependências
+node_modules/
+
+# Dados e logs (específicos por instância)
+data/
+logs/
+
+# Segredos
+.env
+
+# Bun
+bun.lockb
+
+# TypeScript build cache
+*.tsbuildinfo
+
+# WireGuard (configs de VPN — chaves privadas!)
+wireguard-clients/
+
+# Arquivos extras não relacionados ao bot
+src/admin.ts
+src/telegram.ts
