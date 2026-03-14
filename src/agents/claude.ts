@@ -2,34 +2,30 @@ import { spawn } from 'child_process'
 import { randomUUID } from 'crypto'
 import type { Session } from '../storage'
 
-const CLAUDE_BIN = '/home/ubuntu/.npm-global/bin/claude'
+const HOME = process.env.HOME || '/root'
 
 function buildEnv() {
   const e: Record<string, string> = {
     ...process.env as any,
-    PATH: '/home/ubuntu/.npm-global/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin',
-    HOME: '/home/ubuntu',
+    PATH: `${HOME}/.npm-global/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin`,
+    HOME,
     LANG: 'en_US.UTF-8',
   }
   delete e.ANTHROPIC_API_KEY
   return e
 }
 
-// Roda o CLI e retorna quando terminar — sem matar o processo por timeout
 function spawnClaude(args: string[]): Promise<string> {
   return new Promise((resolve, reject) => {
     let stdout = ''
     let stderr = ''
-
-    const proc = spawn(CLAUDE_BIN, args, { env: buildEnv() })
-
+    const proc = spawn('claude', args, { env: buildEnv() })
     proc.stdout.on('data', (d: Buffer) => { stdout += d.toString() })
     proc.stderr.on('data', (d: Buffer) => { stderr += d.toString() })
-
     proc.on('close', (code) => {
       const out = stdout.trim()
       if (out) resolve(out)
-      else reject(new Error(stderr.trim() || `Claude saiu com código ${code}`))
+      else reject(new Error(stderr.trim() || `Claude exited with code ${code}`))
     })
     proc.on('error', reject)
   })
@@ -42,16 +38,13 @@ export async function askClaude(
 ): Promise<string> {
   try {
     if (session.claudeSessionId) {
-      // Retomar sessão existente
-      const out = await spawnClaude([
+      return await spawnClaude([
         '--resume', session.claudeSessionId,
         '-p', userMessage,
         '--output-format', 'text',
         '--dangerously-skip-permissions',
       ])
-      return out
     } else {
-      // Nova sessão — output JSON para capturar o session_id real
       const newId = randomUUID()
       const raw = await spawnClaude([
         '-p', userMessage,
@@ -61,17 +54,15 @@ export async function askClaude(
       ])
       try {
         const obj = JSON.parse(raw)
-        const text = obj.result ?? String(raw)
-        const sid  = obj.session_id ?? newId
-        onNewSessionId?.(sid)   // salva SOMENTE após sucesso
-        return text
+        onNewSessionId?.(obj.session_id ?? newId)
+        return obj.result ?? raw
       } catch {
         onNewSessionId?.(newId)
         return raw
       }
     }
   } catch (err: any) {
-    return `❌ Erro Claude: ${err.message}`
+    return `❌ Claude error: ${err.message}`
   }
 }
 
