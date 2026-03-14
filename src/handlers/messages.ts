@@ -7,8 +7,6 @@ import { mdToTg, splitHtml } from '../utils/markdown'
 
 const activeLocks = new Set<string>()
 
-// ─── helpers ────────────────────────────────────────────────────────────────
-
 async function sendLong(api: Api, chatId: string, text: string, opts: any = {}) {
   const html = mdToTg(text)
   for (const chunk of splitHtml(html)) {
@@ -20,11 +18,10 @@ async function sendLong(api: Api, chatId: string, text: string, opts: any = {}) 
   }
 }
 
-/** Generates a short topic title from the first user message */
 function makeTopicTitle(userMessage: string, model: string): string {
   const label = model === 'claude' ? 'Claude' : model === 'codex' ? 'Codex' : model
-  // First line only, max 40 chars, break at last word boundary
-  let title = userMessage.split('\n')[0].trim().replace(/\s+/g, ' ')
+  const firstLine = userMessage.split('\n').at(0) ?? ''
+  let title = firstLine.trim().replace(/\s+/g, ' ')
   if (title.length > 40) {
     const cut = title.slice(0, 40).lastIndexOf(' ')
     title = title.slice(0, cut > 10 ? cut : 40).trim()
@@ -32,7 +29,6 @@ function makeTopicTitle(userMessage: string, model: string): string {
   return `${title} — ${label}`
 }
 
-/** Renames the forum topic after the first message exchange */
 async function tryRenameThread(
   api: Api,
   groupId: number,
@@ -42,14 +38,11 @@ async function tryRenameThread(
 ) {
   if (!threadId || !groupId) return
   try {
-    const name = makeTopicTitle(userMessage, model)
-    await api.editForumTopic(groupId, threadId, { name })
+    await api.editForumTopic(groupId, threadId, { name: makeTopicTitle(userMessage, model) })
   } catch {
-    // silently ignore — topic rename is non-critical
+    // silently ignore — non-critical
   }
 }
-
-// ─── message handler ─────────────────────────────────────────────────────────
 
 export function registerMessageHandler(bot: Bot<Context>, storage: Storage, config: Config) {
   bot.on('message:text', async (ctx) => {
@@ -66,30 +59,27 @@ export function registerMessageHandler(bot: Bot<Context>, storage: Storage, conf
     } else {
       session = storage.getActiveSession(chatId)
       if (!session) {
-        await ctx.reply('⚠️ No active session. Use /new or /nova.')
+        await ctx.reply('\u26a0\ufe0f No active session. Use /new or /nova.')
         return
       }
     }
 
     if (activeLocks.has(session.id)) {
       const opts: any = threadId > 0 ? { message_thread_id: threadId } : {}
-      await ctx.reply('⚙️ Still processing the previous message, please wait...', opts)
+      await ctx.reply('\u2699\ufe0f Still processing the previous message, please wait...', opts)
       return
     }
 
-    // Is this the first message? (rename topic after response)
     const isFirstMessage = session.history.length === 0
 
     activeLocks.add(session.id)
     const replyOpts: any = threadId > 0 ? { message_thread_id: threadId } : {}
-    const emoji = session.model === 'claude' ? '🟣' : '🟢'
+    const emoji = session.model === 'claude' ? '\U0001f7e3' : '\U0001f7e2'
 
-    // Immediate feedback
     const workingMsg = await ctx.reply(`${emoji} <i>Processing...</i>`, {
       ...replyOpts, parse_mode: 'HTML'
     })
 
-    // Typing loop
     const typingLoop = setInterval(async () => {
       try { await ctx.replyWithChatAction('typing', replyOpts) } catch {}
     }, 4000)
@@ -106,7 +96,7 @@ export function registerMessageHandler(bot: Bot<Context>, storage: Storage, conf
           (id) => storage.setCodexThreadId(chatId, session!.id, id))
       }
     } catch (err: any) {
-      response = `❌ Error: ${err.message}`
+      response = `\u274c Error: ${err.message}`
     } finally {
       clearInterval(typingLoop)
       activeLocks.delete(session.id)
@@ -114,18 +104,10 @@ export function registerMessageHandler(bot: Bot<Context>, storage: Storage, conf
 
     storage.addMessage(chatId, session.id, 'assistant', response)
 
-    // Rename topic on first exchange
     if (isFirstMessage && config.FORUM_GROUP_ID && threadId > 0) {
-      await tryRenameThread(
-        ctx.api,
-        Number(config.FORUM_GROUP_ID),
-        threadId,
-        text,
-        session.model
-      )
+      await tryRenameThread(ctx.api, Number(config.FORUM_GROUP_ID), threadId, text, session.model)
     }
 
-    // Delete "Processing..." and send formatted response
     try { await ctx.api.deleteMessage(ctx.chat.id, workingMsg.message_id) } catch {}
     await sendLong(ctx.api, chatId, `${emoji} ${response}`, replyOpts)
   })
