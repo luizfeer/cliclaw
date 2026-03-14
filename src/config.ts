@@ -1,12 +1,26 @@
 import { existsSync, readFileSync } from 'fs'
+import { execSync } from 'child_process'
+
+export type AgentName = 'claude' | 'codex'
+export type PermissionMode = 'auto' | 'session' | 'ask'
 
 export interface Config {
   TELEGRAM_BOT_TOKEN: string
-  ANTHROPIC_API_KEY: string
-  OPENAI_API_KEY: string
   DATA_DIR: string
-  FORUM_GROUP_ID: string   // ID do grupo Telegram com Forum Mode (opcional)
+  FORUM_GROUP_ID: string
   TELEGRAM_ADMIN_IDS: string[]
+  PERMISSION_MODE: PermissionMode
+  availableAgents: AgentName[]
+}
+
+function checkAgents(): AgentName[] {
+  const available: AgentName[] = []
+  const tryWhich = (bin: string) => {
+    try { execSync(`which ${bin}`, { stdio: 'ignore' }); return true } catch { return false }
+  }
+  if (tryWhich('claude')) available.push('claude')
+  if (tryWhich('codex'))  available.push('codex')
+  return available
 }
 
 export function loadConfig(): Config {
@@ -24,20 +38,29 @@ export function loadConfig(): Config {
     }
   }
 
+  const rawMode = (process.env.PERMISSION_MODE || 'auto').toLowerCase()
+  const permMode: PermissionMode =
+    rawMode === 'session' ? 'session' :
+    rawMode === 'ask'     ? 'ask'     : 'auto'
+
   const config: Config = {
     TELEGRAM_BOT_TOKEN: process.env.TELEGRAM_BOT_TOKEN || '',
-    ANTHROPIC_API_KEY:  process.env.ANTHROPIC_API_KEY  || '',
-    OPENAI_API_KEY:     process.env.OPENAI_API_KEY     || '',
-    DATA_DIR:           process.env.DATA_DIR           || (process.env.HOME + '/openclaw/data'),
-    FORUM_GROUP_ID:     process.env.FORUM_GROUP_ID     || '',
+    DATA_DIR:           process.env.DATA_DIR || (process.env.HOME + '/openclaw/data'),
+    FORUM_GROUP_ID:     process.env.FORUM_GROUP_ID || '',
     TELEGRAM_ADMIN_IDS: (process.env.TELEGRAM_ADMIN_IDS || '')
-      .split(',')
-      .map(id => id.trim())
-      .filter(Boolean),
+      .split(',').map(id => id.trim()).filter(Boolean),
+    PERMISSION_MODE:    permMode,
+    availableAgents:    checkAgents(),
   }
 
   if (!config.TELEGRAM_BOT_TOKEN) {
-    throw new Error('TELEGRAM_BOT_TOKEN não configurado no .env')
+    throw new Error('TELEGRAM_BOT_TOKEN not set in .env')
+  }
+
+  if (config.availableAgents.length === 0) {
+    console.warn('\n⚠️  No AI CLIs found in PATH. Run /start in Telegram for setup instructions.\n')
+  } else {
+    console.log(`✅ Available agents: ${config.availableAgents.join(', ')} | Permission mode: ${config.PERMISSION_MODE}`)
   }
 
   return config

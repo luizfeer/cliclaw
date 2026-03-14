@@ -1,11 +1,11 @@
 {
-  "name": "openclaw",
+  "name": "cliclaw",
   "version": "1.0.0",
-  "description": "Bot Telegram para Claude e Codex",
+  "description": "Telegram bot bridging AI CLIs (Claude Code, Codex) to Forum Topics",
   "main": "index.ts",
   "scripts": {
-    "start": "bun run index.ts",
-    "dev": "bun --watch run index.ts"
+    "start": "tsx index.ts",
+    "dev": "tsx watch index.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",
@@ -13,7 +13,20 @@
     "openai": "^4.97.0"
   },
   "devDependencies": {
-    "@types/bun": "latest",
-    "typescript": "^5.0.0"
-  }
+    "typescript": "^5.0.0",
+    "@types/node": "^20.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/luizfeer/cliclaw.git"
+  },
+  "keywords": [
+    "telegram",
+    "claude",
+    "codex",
+    "cli",
+    "bot",
+    "forum"
+  ],
+  "license": "MIT"
 }

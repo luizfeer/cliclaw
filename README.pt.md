@@ -1,94 +1,108 @@
 # 🦀 Cli-Claw
 
-> **Cli-Claw** é um bot Telegram que funciona como **ponte entre CLIs de IA e seu celular** — cada conversa vive em um tópico dedicado de Fórum, dando acesso direto ao Claude Code e OpenAI Codex de qualquer lugar, sem sair do Telegram.
-
-A ideia é simples: ferramentas poderosas de IA em CLI rodam no servidor, mas interagir com elas exige um terminal. O Cli-Claw resolve isso expondo esses CLIs através de tópicos de fórum do Telegram — um tópico por sessão, contexto persistente, respostas assíncronas. Você digita pelo celular; o CLI roda na VPS; a resposta volta.
+> **Cli-Claw** é um bot Telegram que funciona como **ponte direta entre ferramentas CLI de IA e o seu celular**. Cada conversa vive em um tópico dedicado de Fórum — você digita de qualquer lugar, o CLI roda no servidor, a resposta volta. Sem API keys, sem cobrança por token, só o seu plano de assinatura.
 
 ```
 /nova  →  abre um tópico no fórum  →  🟣 Claude ou 🟢 Codex
  └ cada tópico = uma sessão CLI com memória completa de conversa
 ```
 
+📖 **[Read in English →](README.md)**
+
 ---
 
-## Por que ponte de CLI?
+## Por que uma ponte de CLI?
 
-A maioria dos bots Telegram de IA chama APIs HTTP. O Cli-Claw é diferente:
+A maioria dos bots Telegram de IA chama APIs HTTP. O Cli-Claw é diferente — ele aciona os binários CLI instalados no seu servidor:
 
-| Abordagem | Cli-Claw | Bots baseados em API |
+| | Cli-Claw | Bots baseados em API |
 |---|---|---|
-| Autenticação | OAuth / login ChatGPT | API keys (pago por token) |
-| Acesso ao modelo | Seu plano de assinatura | Cobrança por uso |
-| Tarefas agênticas | Sim — ferramentas CLI completas | Limitado |
-| Permissões | Configurável por sessão | N/A |
-| Funciona offline | Sim (apenas VPS) | Não |
+| **Autenticação** | OAuth / login ChatGPT | API keys (pago por token) |
+| **Custo** | Seu plano de assinatura | Cobrança por uso |
+| **Tarefas agênticas** | ✅ Acesso completo às ferramentas | ❌ Limitado |
+| **Controle de permissões** | ✅ Por sessão / sob demanda | N/A |
+| **Adicionar novo CLI** | Instale e reinicie | N/A |
 
-Por acionar os binários CLI diretamente, o Cli-Claw pode executar tarefas agênticas longas — instalar software, escrever e executar código, navegar em arquivos — da mesma forma que você faria no terminal.
+Por acionar processos CLI reais, o Cli-Claw pode fazer tudo o que você faria no terminal — instalar software, executar código, navegar em arquivos, rodar workflows agênticos longos.
 
 ---
 
-## Funcionalidades
+## Agentes disponíveis
 
-- **Forum-first** — cada sessão de IA é um tópico dedicado no Telegram
-- **Sessões persistentes** — armazenamento JSON, contexto sobrevive a reinicializações
-- **Sem API keys** — Claude Code OAuth + login ChatGPT do Codex
-- **Permissões configuráveis** — modo automático, por sessão ou sob demanda
-- **Processamento assíncrono** — indicador de digitação enquanto o CLI roda
-- **Lock por sessão** — sem processos duplicados
-- **Formatação nativa do Telegram** — Markdown convertido para HTML automaticamente
+| Agente | Status | Requisito |
+|---|---|---|
+| 🟣 **Claude Code** | ✅ Disponível | Assinatura claude.ai |
+| 🟢 **Codex** | ✅ Disponível | Conta OpenAI/ChatGPT |
+| 🔜 **OpenCode** | Em breve | CLI open-source, sem assinatura |
+
+Cada agente que você instala fica disponível imediatamente. O bot detecta quais CLIs estão no `PATH` ao iniciar e exibe um guia de configuração para o que ainda não está instalado.
+
+---
+
+## Comandos do bot
+
+| Português | Inglês | Descrição |
+|---|---|---|
+| `/nova` | `/new` | Nova sessão Claude (cria tópico no fórum) |
+| `/nova codex` | `/new codex` | Nova sessão Codex |
+| `/sessoes` | `/sessions` | Listar todas as sessões |
+| `/limpar` | `/clear` | Reiniciar sessão / tópico atual |
+| `/status` | `/status` | Info da sessão ativa |
+| `/id` | `/id` | Ver ID deste chat |
+| `/ajuda` | `/help` | Exibir ajuda |
 
 ---
 
 ## Requisitos
 
 - **Ubuntu 22+** (testado em Oracle Cloud ARM64)
-- **Node.js 22+** e **Bun 1.3+**
-- **Claude Code CLI** autenticado via OAuth (`claude`)
-- **Codex CLI** autenticado via ChatGPT (`codex login`)
+- **Node.js 22+**
+- **Claude Code CLI** autenticado via OAuth (`claude`) — *opcional, instale para ativar 🟣*
+- **Codex CLI** autenticado via ChatGPT (`codex login`) — *opcional, instale para ativar 🟢*
 - Um **grupo** Telegram com **Tópicos ativados**, bot adicionado como **admin**
 
 ---
 
 ## Instalação
 
-### 1. Clonar e instalar dependências
+### 1. Clonar e instalar
 
 ```bash
 git clone https://github.com/luizfeer/cliclaw.git
 cd cliclaw
-bun install
+npm install
 ```
 
-### 2. Instalar os CLIs
+### 2. Instalar Node.js 22 (se necessário)
 
 ```bash
-# Node.js 22
 curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
 sudo apt-get install -y nodejs
-
-# Bun
-curl -fsSL https://bun.sh/install | bash
-
-# Claude Code + Codex + PM2 (sem sudo)
-mkdir -p ~/.npm-global
-npm config set prefix ~/.npm-global
-echo 'export PATH="$HOME/.npm-global/bin:$PATH"' >> ~/.bashrc
-source ~/.bashrc
-
-npm install -g @anthropic-ai/claude-code @openai/codex pm2
+npm install -g tsx pm2
 ```
 
-### 3. Autenticar os CLIs
+### 3. Instalar os CLIs de IA
+
+Instale pelo menos um. Pode adicionar mais depois — basta reiniciar o bot.
 
 ```bash
-# Claude Code — abre link OAuth (requer assinatura claude.ai)
-claude
+# Configurar npm global sem sudo
+mkdir -p ~/.npm-global
+npm config set prefix ~/.npm-global
+echo 'export PATH="$HOME/.npm-global/bin:$PATH"' >> ~/.bashrc && source ~/.bashrc
 
-# Codex — login via ChatGPT
+# 🟣 Claude Code (requer assinatura claude.ai)
+npm install -g @anthropic-ai/claude-code
+claude   # abre link OAuth no navegador
+
+# 🟢 Codex (requer conta OpenAI/ChatGPT)
+npm install -g @openai/codex
 codex login
 ```
 
-### 4. Configurar o ambiente
+> **Ainda não tem nenhum?** Tudo bem — instale o bot primeiro, depois envie `/start` no Telegram. O bot mostrará exatamente o que executar.
+
+### 4. Configurar
 
 ```bash
 cp .env.example .env
@@ -96,70 +110,93 @@ nano .env
 ```
 
 ```env
-TELEGRAM_BOT_TOKEN=   # obter no @BotFather → /newbot
+TELEGRAM_BOT_TOKEN=   # obtido no @BotFather → /newbot
 FORUM_GROUP_ID=       # use /id dentro do grupo para obter
 ```
 
-### 5. Escolher o modo de permissões para os modelos de IA
+### 5. Escolher o modo de permissões
 
-O Cli-Claw suporta três níveis de permissão. Defina `PERMISSION_MODE` no seu `.env`:
+Adicione `PERMISSION_MODE` ao seu `.env`:
 
-| Modo | Valor no .env | Comportamento |
+| Modo | Valor | Comportamento |
 |---|---|---|
-| **Full auto** *(recomendado para VPS)* | `PERMISSION_MODE=auto` | Sempre passa `--dangerously-skip-permissions` — sem prompts, modelos rodam livremente |
-| **Por sessão** | `PERMISSION_MODE=session` | Ao criar sessão com `/nova`, o bot pergunta: *"Permitir full auto nesta sessão?"* |
-| **Sob demanda** | `PERMISSION_MODE=ask` | Padrão é restrito; prefixe qualquer mensagem com `!` para liberar full auto só naquele envio |
+| **Full auto** *(recomendado)* | `auto` | Sempre pula prompts de permissão — modelos rodam livremente |
+| **Por sessão** | `session` | Bot pergunta ao criar `/nova`: *"Permitir full auto nesta sessão?"* |
+| **Sob demanda** | `ask` | Restrito por padrão; prefixe mensagens com `!` para liberar só aquele envio |
 
 ```env
-# Exemplo: perguntar por sessão
-PERMISSION_MODE=session
+PERMISSION_MODE=auto
 ```
-
-> Para a maioria das implantações em VPS que você controla, `auto` é a escolha prática. Use `session` ou `ask` se compartilha o bot com outros ou quer ser consultado antes de tarefas agênticas.
 
 ### 6. Configurar o grupo Telegram
 
 1. Crie um grupo no Telegram
 2. **Editar grupo → Tópicos → Ativar**
 3. Adicione o bot como **Admin** com permissão de *Gerenciar Tópicos*
-4. Envie `/id` no grupo — copie o `Chat ID`
+4. Envie `/id` no grupo e copie o Chat ID
 5. Cole como `FORUM_GROUP_ID` no `.env`
 
 ### 7. Iniciar
 
 ```bash
-# Uma vez (teste)
-bun run index.ts
+# Teste rápido
+npx tsx index.ts
 
-# Produção com PM2
+# Produção — reinicia automaticamente em crash e reboot
 pm2 start ecosystem.config.js
-pm2 save
-pm2 startup   # siga o comando impresso
+pm2 save && pm2 startup
 ```
 
 ---
 
-## Comandos do Bot
+## Como funciona
 
-| Comando | Descrição |
-|---|---|
-| `/nova` | Nova sessão Claude (cria tópico no fórum) |
-| `/nova codex` | Nova sessão Codex (cria tópico no fórum) |
-| `/sessoes` | Listar todas as sessões |
-| `/limpar` | Limpar histórico da sessão atual |
-| `/status` | Ver info da sessão ativa |
-| `/id` | Ver ID do chat atual |
+```
+Mensagem no tópico do fórum
+       ↓
+Identifica sessão pelo thread_id
+       ↓
+Lock da sessão (impede processos concorrentes)
+       ↓
+Envia "⚙️ Processando..." + typing loop a cada 4s
+       ↓
+Spawn do CLI com base no PERMISSION_MODE:
+  claude --resume <id> -p "msg" --output-format text
+  codex exec resume <thread> --json "msg"
+       ↓
+Processo roda até terminar (sem timeout que mata o processo)
+       ↓
+Deleta "Processando..." → envia resposta formatada em HTML
+```
+
+Os IDs de sessão são salvos em `data/chat_<id>.json` — o contexto sobrevive a reinicializações.
 
 ---
 
-## Estrutura do Projeto
+## Publicar no npm *(planejado)*
+
+O objetivo é tornar a instalação um único comando:
+
+```bash
+npm install -g cliclaw
+cliclaw setup   # wizard interativo: token do bot, ID do grupo, modo de permissão
+cliclaw start
+```
+
+Isso requer um wizard `cli.js` e um entry point compilado. Os CLIs (`claude`, `codex`) ainda precisariam ser autenticados manualmente — o npm pode empacotar o código do bot mas não sessões OAuth. O wizard guiaria por esse passo.
+
+Contribuições são bem-vindas: **[github.com/luizfeer/cliclaw](https://github.com/luizfeer/cliclaw)**
+
+---
+
+## Estrutura do projeto
 
 ```
 cliclaw/
 ├── index.ts                   # Ponto de entrada
-├── ecosystem.config.js        # Configuração PM2
+├── ecosystem.config.js        # Configuração PM2 (usa tsx)
 ├── src/
-│   ├── config.ts              # Carrega variáveis do .env
+│   ├── config.ts              # Carrega .env + detecta CLIs disponíveis
 │   ├── storage.ts             # Persistência de sessões em JSON
 │   ├── agents/
 │   │   ├── claude.ts          # Wrapper do CLI Claude Code
@@ -170,81 +207,32 @@ cliclaw/
 │   └── utils/
 │       └── markdown.ts        # Conversor Markdown → HTML do Telegram
 ├── data/                      # Arquivos JSON de sessão (ignorado pelo git)
-├── logs/                      # Logs do PM2 (ignorado pelo git)
 ├── .env                       # Segredos (ignorado pelo git)
 └── .env.example               # Template de configuração
 ```
 
 ---
 
-## Como Funciona
-
-```
-Usuário envia mensagem no tópico do fórum
-        ↓
-messages.ts: identifica sessão pelo thread_id
-        ↓
-Lock da sessão (impede processos concorrentes)
-        ↓
-Envia "⚙️ Processando..." + typing loop a cada 4s
-        ↓
-Spawn do CLI com flags de permissão baseadas no PERMISSION_MODE
-  claude --resume <id> -p "msg" --output-format text [--dangerously-skip-permissions]
-  codex exec resume <thread> --json "msg" [--dangerously-bypass-approvals-and-sandbox]
-        ↓
-Processo roda até terminar (sem timeout que mata o processo)
-        ↓
-Deleta "Processando..." → envia resposta formatada em HTML
-```
-
-Os IDs de sessão (`claudeSessionId`, `codexThreadId`) são salvos em `data/chat_<id>.json` para que o contexto sobreviva a reinicializações.
-
----
-
-## Publicar no npm
-
-O Cli-Claw pode ser distribuído como pacote npm, tornando a instalação um único comando.
-
-**Como funciona:**
-
-```bash
-npm install -g cliclaw
-cliclaw setup   # wizard interativo: token do bot, ID do grupo, modo de permissão
-cliclaw start   # inicia via PM2
-```
-
-O pacote incluiria um entry point compilado (`bun build --compile`) ou um wrapper compatível com Node. O `package.json` precisa de um campo `bin`:
-
-```json
-{
-  "name": "cliclaw",
-  "bin": { "cliclaw": "./cli.js" },
-  "files": ["dist/", "cli.js", "src/", "ecosystem.config.js", ".env.example"]
-}
-```
-
-Depois é só publicar:
-
-```bash
-npm login
-npm publish
-```
-
-> **Nota:** Os CLIs (`claude`, `codex`) ainda precisam ser autenticados manualmente após a instalação — o npm pode empacotar o código do bot mas não pode empacotar sessões OAuth. Um wizard `cliclaw setup` guiaria por esse processo. Planejado para versão futura.
-
----
-
-## Implantando em Outra VPS
+## Deploy em outra VPS
 
 ```bash
 git clone https://github.com/luizfeer/cliclaw.git
-cd cliclaw && bun install
-npm install -g @anthropic-ai/claude-code @openai/codex pm2
-claude          # autenticar Claude
-codex login     # autenticar Codex
+cd cliclaw && npm install
+npm install -g tsx pm2 @anthropic-ai/claude-code @openai/codex
+claude && codex login
 cp .env.example .env && nano .env
 pm2 start ecosystem.config.js && pm2 save
 ```
+
+---
+
+## Contribuindo
+
+Cli-Claw é um projeto aberto para a comunidade. PRs são bem-vindos — especialmente:
+- Novos adaptadores de agentes CLI (OpenCode, Gemini CLI, etc.)
+- Wizard `cliclaw setup` para distribuição via npm
+- Melhorias de i18n
+- UX de permissões mais refinada
 
 ---
 

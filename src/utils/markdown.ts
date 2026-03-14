@@ -50,8 +50,8 @@ export function mdToTg(text: string): string {
   s = s.replace(/^[-*_]{3,}$/gm, '──────────────')
 
   // 11. Restaurar blocos protegidos
-  s = s.replace(/\x00CB(\d+)\x00/g, (_: string, i: string) => codeBlocks[Number(i)])
-  s = s.replace(/\x00IC(\d+)\x00/g, (_: string, i: string) => inlineCodes[Number(i)])
+  s = s.replace(/\x00CB(\d+)\x00/g, (_: string, i: string) => codeBlocks[Number(i)]!)
+  s = s.replace(/\x00IC(\d+)\x00/g, (_: string, i: string) => inlineCodes[Number(i)]!)
 
   return s.trim()
 }
