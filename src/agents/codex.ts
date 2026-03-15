@@ -86,7 +86,9 @@ function startProto(appSessionId: string): ProtoSession {
       try {
         const obj = JSON.parse(line)
         handleProtoEvent(ps, obj)
-      } catch {}
+      } catch (e: any) {
+        console.error('[Codex proto] parse error:', e?.message, '| line:', line.slice(0, 120))
+      }
     }
   })
 
@@ -132,18 +134,22 @@ function handleProtoEvent(ps: ProtoSession, obj: any) {
     const commandStr = formatApprovalCommand(msg.command ?? msg.cmd)
     console.log(`[Codex approval] request recebido sub_id=${subId} cmd="${commandStr.slice(0, 80)}"`)
 
-    // Respond using the original message id so Codex can correlate the reply
+    // Codex uses JSON-RPC 2.0 with its own decision strings
+    const DECISION_MAP: Record<string, string> = {
+      approved:             'accept',
+      approved_for_session: 'acceptForSession',
+      denied:               'decline',
+      abort:                'cancel',
+    }
     const respond = (decision: string) => {
-      // Handle app-level session approval — Codex only understands 'approved'/'denied'/'abort'
-      if (decision === 'approved_for_session') {
-        ps.sessionApproved = true
-        decision = 'approved'
-      }
-      console.log(`[Codex approval] enviando exec_approval sub_id=${subId} decision=${decision}`)
+      if (decision === 'approved_for_session') ps.sessionApproved = true
+      const codexDecision = DECISION_MAP[decision] ?? 'decline'
+      console.log(`[Codex approval] enviando exec_approval id=${msgId} decision=${codexDecision}`)
       try {
         ps.proc.stdin!.write(JSON.stringify({
-          id:  msgId,   // use original event id, not a new UUID
-          op:  { type: 'exec_approval', sub_id: subId, decision },
+          jsonrpc: '2.0',
+          id:      msgId,
+          result:  { decision: codexDecision },
         }) + '\n')
         console.log(`[Codex approval] enviado ok`)
       } catch (e: any) {
