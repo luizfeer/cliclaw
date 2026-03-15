@@ -39,17 +39,14 @@ function handleApproval(proc, obj, decision) {
   const msg        = obj.msg
   if (msg?.type !== 'exec_approval_request') return null
 
-  const subId      = msg.sub_id ?? msg.call_id ?? msgId
+  // mirrors codex.ts: effective_approval_id() = approval_id ?? call_id ?? sub_id ?? outer_id
+  const approvalId = msg.approval_id ?? msg.call_id ?? msg.sub_id ?? msgId
+  const turnId     = msg.turn_id
 
-  // ← THIS IS WHAT WE'RE TESTING — keeps in sync with codex.ts manually
-  const respond = (dec) => {
-    proc.stdin.write(JSON.stringify({
-      id:  randomUUID(),
-      op:  { type: 'exec_approval', id: subId, decision: dec },
-    }) + '\n')
-  }
+  const op = { type: 'exec_approval', id: approvalId, decision }
+  if (turnId) op.turn_id = turnId
 
-  respond(decision)
+  proc.stdin.write(JSON.stringify({ id: randomUUID(), op }) + '\n')
 }
 
 // ─── test runner ──────────────────────────────────────────────────────────────
@@ -116,7 +113,7 @@ allPassed &= runTest(
 )
 
 allPassed &= runTest(
-  'approve — op.id equals sub_id (not sub_id field)',
+  'approve — op.id equals call_id/approval_id (not sub_id field)',
   incomingApprovalRequest, 'approved',
   (r) => r.op?.id === SUB_ID || `op.id should be "${SUB_ID}", got: ${r.op?.id} (sub_id=${r.op?.sub_id})`
 )
@@ -159,6 +156,37 @@ allPassed &= runTest(
   'call_id fallback — op.id equals call_id',
   incomingWithCallId, 'approved',
   (r) => r.op?.id === SUB_ID || `op.id should be "${SUB_ID}", got: ${r.op?.id}`
+)
+
+// ─── approval_id takes priority over call_id ─────────────────────────────────
+const APPROVAL_ID = 'approval_XyZ987'
+const incomingWithApprovalId = {
+  id:  MSG_ID,
+  msg: {
+    type:        'exec_approval_request',
+    call_id:     SUB_ID,
+    approval_id: APPROVAL_ID,
+    turn_id:     'turn_abc',
+    command:     ['systeminfo'],
+  },
+}
+
+allPassed &= runTest(
+  'approval_id takes priority over call_id',
+  incomingWithApprovalId, 'approved',
+  (r) => r.op?.id === APPROVAL_ID || `op.id should be "${APPROVAL_ID}", got: ${r.op?.id}`
+)
+
+allPassed &= runTest(
+  'turn_id included when present in request',
+  incomingWithApprovalId, 'approved',
+  (r) => r.op?.turn_id === 'turn_abc' || `op.turn_id should be "turn_abc", got: ${r.op?.turn_id}`
+)
+
+allPassed &= runTest(
+  'turn_id omitted when not in request',
+  incomingApprovalRequest, 'approved',
+  (r) => r.op?.turn_id === undefined || `op.turn_id should be absent, got: ${r.op?.turn_id}`
 )
 
 console.log('')

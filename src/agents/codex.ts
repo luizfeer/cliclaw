@@ -130,18 +130,19 @@ function handleProtoEvent(ps: ProtoSession, obj: any) {
 
   // ── exec approval request ───────────────────────────────────────────────────
   if (msg?.type === 'exec_approval_request') {
-    const subId      = msg.sub_id ?? msg.call_id ?? msgId
+    // effective_approval_id() in Codex uses approval_id ?? call_id
+    const approvalId = msg.approval_id ?? msg.call_id ?? msg.sub_id ?? msgId
+    const turnId     = msg.turn_id as string | undefined
     const commandStr = formatApprovalCommand(msg.command ?? msg.cmd)
-    console.log(`[Codex approval] request recebido sub_id=${subId} cmd="${commandStr.slice(0, 80)}"`)
+    console.log(`[Codex approval] request: outer_id=${msgId} approval_id=${approvalId} turn_id=${turnId} raw=${JSON.stringify(msg)}`)
 
     const respond = (decision: string) => {
       if (decision === 'approved_for_session') ps.sessionApproved = true
-      console.log(`[Codex approval] enviando exec_approval sub_id=${subId} decision=${decision}`)
+      const op: Record<string, unknown> = { type: 'exec_approval', id: approvalId, decision }
+      if (turnId) op.turn_id = turnId
+      console.log(`[Codex approval] enviando: ${JSON.stringify({ id: '...', op })}`)
       try {
-        ps.proc.stdin!.write(JSON.stringify({
-          id:  randomUUID(),
-          op:  { type: 'exec_approval', id: subId, decision },
-        }) + '\n')
+        ps.proc.stdin!.write(JSON.stringify({ id: randomUUID(), op }) + '\n')
         console.log(`[Codex approval] enviado ok`)
       } catch (e: any) {
         console.error(`[Codex approval] erro ao enviar: ${e.message}`)
