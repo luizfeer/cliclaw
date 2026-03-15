@@ -158,7 +158,7 @@ function handleProtoEvent(ps: ProtoSession, obj: any) {
 
     if (ps.approvalHandler) {
       console.log(`[Codex approval] aguardando usuário via Telegram...`)
-      ps.approvalHandler(subId, commandStr)
+      ps.approvalHandler(approvalId, commandStr)
         .then(respond)
         .catch((e: any) => {
           console.error(`[Codex approval] handler error: ${e?.message} — negando`)
