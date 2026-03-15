@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from 'fs'
 import { execSync } from 'child_process'
+import { join } from 'path'
 
 export type AgentName = 'claude' | 'codex'
 export type PermissionMode = 'auto' | 'session' | 'ask'
@@ -13,18 +14,25 @@ export interface Config {
   availableAgents: AgentName[]
 }
 
+// Resolve package root relative to this file (works for global npm install too)
+// src/config.ts is 1 level below package root
+const PKG_ROOT = join(__dirname, '..')
+
 function checkAgents(): AgentName[] {
   const available: AgentName[] = []
-  const tryWhich = (bin: string) => {
-    try { execSync(`which ${bin}`, { stdio: 'ignore' }); return true } catch { return false }
+  const isWindows = process.platform === 'win32'
+  const findCmd = isWindows ? 'where' : 'which'
+  const tryFind = (bin: string) => {
+    try { execSync(`${findCmd} ${bin}`, { stdio: 'ignore' }); return true } catch { return false }
   }
-  if (tryWhich('claude')) available.push('claude')
-  if (tryWhich('codex'))  available.push('codex')
+  if (tryFind('claude')) available.push('claude')
+  if (tryFind('codex'))  available.push('codex')
   return available
 }
 
 export function loadConfig(): Config {
-  const envFile = process.env.HOME + '/openclaw/.env'
+  // CLICLAW_ENV env var allows override; otherwise resolves to <pkg-root>/.env
+  const envFile = process.env.CLICLAW_ENV || join(PKG_ROOT, '.env')
   if (existsSync(envFile)) {
     const content = readFileSync(envFile, 'utf-8')
     for (const line of content.split('\n')) {
@@ -45,7 +53,7 @@ export function loadConfig(): Config {
 
   const config: Config = {
     TELEGRAM_BOT_TOKEN: process.env.TELEGRAM_BOT_TOKEN || '',
-    DATA_DIR:           process.env.DATA_DIR || (process.env.HOME + '/openclaw/data'),
+    DATA_DIR:           process.env.DATA_DIR || join(PKG_ROOT, 'data'),
     FORUM_GROUP_ID:     process.env.FORUM_GROUP_ID || '',
     TELEGRAM_ADMIN_IDS: (process.env.TELEGRAM_ADMIN_IDS || '')
       .split(',').map(id => id.trim()).filter(Boolean),
@@ -54,7 +62,7 @@ export function loadConfig(): Config {
   }
 
   if (!config.TELEGRAM_BOT_TOKEN) {
-    throw new Error('TELEGRAM_BOT_TOKEN not set in .env')
+    throw new Error(`TELEGRAM_BOT_TOKEN not set in .env (looked at: ${envFile})`)
   }
 
   if (config.availableAgents.length === 0) {
